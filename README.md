@@ -1,0 +1,170 @@
+# Olist delivery performance on BigQuery
+
+An ELT pipeline that loads a public e-commerce dataset into BigQuery, builds a
+delivery-performance mart in SQL, gates it behind data quality assertions, and
+measures what partitioning and clustering actually save.
+
+Everything below is a real number produced by the scripts in this repo, not an
+estimate.
+
+```
+Olist CSVs  ──01_load.sh──▶  olist_raw  ──02_marts.sql──▶  olist_marts
+  (Kaggle)     bq load          (4 tables)   staging views      fct + dim
+                                                  │
+                                                  ├─03_quality_checks.sql─▶ 12 checks + ASSERT
+                                                  ├─04_partition_cluster.sql─▶ partitioned copy
+                                                  └─05_benchmark.sh─▶ bytes scanned, before/after
+```
+
+## Run it
+
+```bash
+pipx install kaggle
+./data/download.sh
+
+gcloud config set project <your-project>
+./01_load.sh
+
+bq --location=US query --use_legacy_sql=false < sql/02_marts.sql
+bq --location=US query --use_legacy_sql=false < sql/03_quality_checks.sql
+bq --location=US query --use_legacy_sql=false < sql/04_partition_cluster.sql
+./05_benchmark.sh
+```
+
+`env.sh` holds the project, location and dataset names in one place, so a stray
+`--location` can never send a job to the wrong region.
+
+Every step is re-runnable: `01_load.sh` loads with `--replace`, the SQL files are
+all `CREATE OR REPLACE`. Running the whole chain twice leaves exactly the same
+data behind, which is the property that makes a pipeline safe to retry.
+
+## What lands in the warehouse
+
+| Layer | Object | Grain | Rows |
+|---|---|---|---:|
+| raw | `olist_raw.orders` | one order | 99,441 |
+| raw | `olist_raw.order_items` | one item line | 112,650 |
+| raw | `olist_raw.customers` | one customer | 99,441 |
+| raw | `olist_raw.sellers` | one seller | 3,095 |
+| marts | `olist_marts.fct_delivery_performance` | one **delivered** order | 96,470 |
+| marts | `olist_marts.dim_seller` | one seller | 2,957 |
+
+Headline figures from the fact table:
+
+| Measure | Value |
+|---|---|
+| Delivered orders | 96,470 |
+| Date range | 2016-09-15 → 2018-08-29 |
+| On-time rate | **93.23 %** |
+| Average delivery time | 12.5 days |
+| Average slack against the promised date | 11.9 days early |
+
+`is_late` compares the actual delivery date against the date promised to the
+customer at checkout (`order_estimated_delivery_date`), so it measures a real
+SLA rather than an invented one. Orders that never reached `delivered` are
+excluded.
+
+## The grain problem
+
+An order can contain items from several sellers, so joining `orders` to
+`order_items` naively turns one order into several rows and inflates every
+revenue number. `02_marts.sql` handles it explicitly:
+
+1. aggregate items to `(order_id, seller_id)`,
+2. pick the seller holding the most items as the order's seller, breaking ties on
+   `seller_id` so the result is identical on every run,
+3. sum money per `order_id` separately, then join.
+
+The fan-out is then checked, not assumed: `dim_order_count_mismatch` asserts that
+orders summed across `dim_seller` equal the row count of the fact table.
+
+## Data quality gate
+
+`03_quality_checks.sql` runs 12 checks in four groups — structural, referential,
+business-rule, reconciliation — prints a PASS/FAIL row for each, and ends with:
+
+```sql
+ASSERT (SELECT COALESCE(SUM(bad_rows), 0) FROM checks) = 0
+  AS 'data quality checks failed — read the result table above ...';
+```
+
+`ASSERT` makes the job exit non-zero, so this is a gate a CI run can hang off,
+not a table someone has to remember to read. Current state: **12 / 12 PASS**.
+
+## Partitioning and clustering, measured
+
+`05_benchmark.sh` runs three queries against both table layouts. The query text
+is byte-for-byte identical; only the table name changes. It reports two numbers:
+the **dry-run** bytes (what the planner commits to — partition pruning only) and
+the **real** bytes from `INFORMATION_SCHEMA.JOBS` (partition *and* cluster
+pruning). Real runs pass `--nouse_cache`, since a cached result reports 0 bytes.
+
+| Query | Layout | dry-run bytes | real bytes | reduction |
+|---|---|---:|---:|---:|
+| Q1  3-month range, all states | plain table | 1,929,400 | 1,929,400 | |
+| | partition + cluster | 412,540 | 412,540 | **78.6 %** |
+| Q2  one state, full history | plain table | 2,701,160 | 2,701,160 | |
+| | partition + cluster | 2,701,160 | 2,701,104 | **0.0 %** |
+| Q3  6-month range + one state | plain table | 5,209,380 | 5,209,380 | |
+| | partition + cluster | 2,174,580 | 2,174,580 | **58.3 %** |
+
+Reading the table honestly:
+
+- **Q1 and Q3 improve because they filter the partition key.** Partitioning only
+  pays when the query restricts the column the table is partitioned on.
+- **Q2 gains nothing.** It filters `seller_state`, a cluster column, and
+  clustering saved 56 bytes out of 2.7 MB. That is not a broken configuration —
+  the fact table is **15.18 MB**. Block pruning needs a table large enough to
+  have blocks worth skipping; below roughly a gigabyte there is nothing to skip.
+  Clustering is the right choice for this schema at production scale and a no-op
+  at this one, and the measurement says so instead of the README claiming a win.
+- Slot time rises slightly on the partitioned table for these small queries —
+  more partitions means more metadata work, which the byte savings do not offset
+  until the data is much bigger.
+
+## Why the partition key is `order_month`, not `order_date`
+
+The first version used `PARTITION BY order_date`, which is the correct key. It
+produced an **empty table**.
+
+The BigQuery sandbox forces a 60-day partition expiration on time-unit
+partitioned tables (`defaultPartitionExpirationMs = 5184000000`), and
+`OPTIONS(partition_expiration_days = NULL)` is silently overridden. Olist runs
+from 2016 to 2018, so every partition was already expired at the moment it was
+written and all 96,470 rows were dropped on creation — quietly, with the job
+reporting success.
+
+Integer `RANGE` partitioning is not covered by that policy. `order_month`
+(`YYYYMM` as `INT64`) is built in `02_marts.sql`, checked against `order_date` by
+`order_month_mismatch` in `03_quality_checks.sql`, and used as the range key in
+`04_partition_cluster.sql`. On a billed project the date version is the better
+key and the file documents it as such.
+
+One related BigQuery behaviour worth knowing: `CREATE OR REPLACE` refuses to
+change an existing table's partitioning spec, so `04_partition_cluster.sql` drops
+the derived table first to stay re-runnable.
+
+## Known limits
+
+- The data covers 2016–2018 and is Brazilian; the pipeline shape transfers, the
+  numbers do not.
+- Sandbox tables expire after 60 days. Re-running the chain rebuilds everything
+  from the CSVs, which is why the load step is scripted rather than manual.
+- No orchestrator yet — the steps are run in order by hand. Airflow is the next
+  piece.
+- The `_opt` table is a full copy of the fact table, which doubles storage. At
+  15 MB that is irrelevant; at production scale you would partition the fact
+  table itself rather than keep two.
+
+## Files
+
+| File | What it does |
+|---|---|
+| `env.sh` | project, location, dataset names, and a `bqq` query helper |
+| `data/download.sh` | fetch the Olist CSVs from Kaggle |
+| `01_load.sh` | preflight, create dataset, load 4 tables, print row counts |
+| `sql/02_marts.sql` | staging views, `fct_delivery_performance`, `dim_seller` |
+| `sql/03_quality_checks.sql` | 12 checks + `ASSERT` gate |
+| `sql/04_partition_cluster.sql` | partitioned + clustered copy of the fact |
+| `05_benchmark.sh` | bytes scanned before/after, dry-run and real |
+| `results/benchmark.md` | generated output of the benchmark |
