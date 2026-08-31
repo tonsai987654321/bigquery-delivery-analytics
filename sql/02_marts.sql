@@ -9,6 +9,7 @@
 -- Grain:
 --   stg_orders                 1 row per order        (typed, unfiltered)
 --   fct_delivery_performance   1 row per delivered order
+--                              carries order_month (YYYYMM) as the range-partition key
 --   dim_seller                 1 row per seller
 
 CREATE SCHEMA IF NOT EXISTS olist_marts;
@@ -78,6 +79,8 @@ order_totals AS (
 SELECT
   o.order_id,
   DATE(o.purchased_at)                                   AS order_date,
+  -- YYYYMM as an INT so the table can be RANGE-partitioned; see 04_partition_cluster.sql
+  CAST(FORMAT_DATE('%Y%m', DATE(o.purchased_at)) AS INT64) AS order_month,
   ps.seller_id,
   s.seller_state,
   c.customer_state,

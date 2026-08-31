@@ -27,6 +27,13 @@ SELECT 'fct_null_key',
        'keys and the partition column must never be NULL'
 FROM olist_marts.fct_delivery_performance
 
+UNION ALL
+SELECT 'order_month_mismatch',
+       COUNTIF(order_month IS NULL
+               OR order_month <> CAST(FORMAT_DATE('%Y%m', order_date) AS INT64)),
+       'order_month is the range-partition key — it must always agree with order_date'
+FROM olist_marts.fct_delivery_performance
+
 -- referential: every fact row points at a real seller
 UNION ALL
 SELECT 'fct_orphan_seller',
