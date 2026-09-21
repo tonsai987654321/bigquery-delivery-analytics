@@ -14,7 +14,14 @@
 --      the sandbox expires the tables.
 --
 -- They read from fct_delivery_performance_opt, so a filter on order_month still
--- prunes partitions all the way through the view.
+-- prunes partitions all the way through the view. Measured, not assumed — the
+-- same 3-month filter, same projection:
+--
+--   through vw_bi_orders (partitioned source)   185,643 bytes
+--   against fct_delivery_performance (plain)    868,230 bytes   -> 78.6% less
+--
+-- which is the same ratio 05_benchmark.sh reports querying the tables directly.
+-- A view does not flatten the physical layout underneath it.
 
 -- ── per-order grain: the detail table behind every drill-down ────────────────
 CREATE OR REPLACE VIEW olist_marts.vw_bi_orders AS
