@@ -21,8 +21,6 @@
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null || true)}"
 LOCATION="${LOCATION:-US}"
 REGION="region-$(printf %s "${LOCATION}" | tr "[:upper:]" "[:lower:]")"   # bash 3.2 on macOS has no ${var,,}
@@ -124,6 +122,7 @@ awk -F'|' '{ dry[$1"/"$2] = $3 } END { for (k in dry) print k"\t"dry[k] }' \
 awk -F',' '{ print $1"/"$2"\t"$3"\t"$4 }' "${TMP}/real.csv" > "${TMP}/real.tsv"
 
 printf '# Benchmark — partitioning and clustering\n\n'
+# shellcheck disable=SC2016  # the backticks are markdown, not command substitution
 printf 'run_id: `%s` · project: `%s` · generated: %s\n\n' \
   "${RUN_ID}" "${PROJECT_ID}" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 

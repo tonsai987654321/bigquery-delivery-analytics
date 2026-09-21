@@ -91,6 +91,20 @@ ASSERT (SELECT COALESCE(SUM(bad_rows), 0) FROM checks) = 0
 `ASSERT` makes the job exit non-zero, so this is a gate a CI run can hang off,
 not a table someone has to remember to read. Current state: **12 / 12 PASS**.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs two gates on every push and pull request:
+
+- `shellcheck` over the three shell scripts,
+- `sqlfluff parse` over `sql/`, which checks every file against the BigQuery
+  dialect — `ASSERT`, `RANGE_BUCKET` and multi-statement scripts included.
+
+Neither gate needs cloud credentials, which is why they can run on a public
+repo without a service account key sitting in a secret. The data quality gate is
+deliberately *not* in CI: it asserts against live BigQuery tables, so it runs
+where the data is. `03_quality_checks.sql` already exits non-zero on failure, so
+wiring it into a scheduled job is a credential problem, not a code one.
+
 ## Partitioning and clustering, measured
 
 `05_benchmark.sh` runs three queries against both table layouts. The query text
@@ -168,3 +182,11 @@ the derived table first to stay re-runnable.
 | `sql/04_partition_cluster.sql` | partitioned + clustered copy of the fact |
 | `05_benchmark.sh` | bytes scanned before/after, dry-run and real |
 | `results/benchmark.md` | generated output of the benchmark |
+| `.github/workflows/ci.yml` | shellcheck + sqlfluff gates, no credentials needed |
+| `.sqlfluff` | pins the BigQuery dialect so local and CI runs agree |
+
+## Data
+
+[Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce),
+published on Kaggle under CC BY-NC-SA 4.0. The CSVs are not redistributed here —
+`data/download.sh` fetches them, and `.gitignore` keeps them out of the repo.
