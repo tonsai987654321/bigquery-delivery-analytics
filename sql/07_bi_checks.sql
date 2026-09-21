@@ -72,6 +72,12 @@ SELECT 'on_time_pct_scale_drift',
        'on_time_pct exists only to be the 0-100 twin of on_time_rate — they must agree'
 
 UNION ALL
+SELECT 'leaderboard_on_time_pct_drift',
+       (SELECT COUNTIF(ABS(on_time_pct - on_time_rate * 100) > 0.01)
+        FROM olist_marts.vw_bi_seller_leaderboard),
+       'the leaderboard percent column must track its own rate column'
+
+UNION ALL
 SELECT 'orders_on_time_pct_mismatch',
        (SELECT COUNTIF(on_time_pct <> on_time_flag * 100)
         FROM olist_marts.vw_bi_orders),

@@ -88,6 +88,7 @@ SELECT
   seller_state,
   delivered_orders,
   on_time_rate,
+  ROUND(on_time_rate * 100, 2) AS on_time_pct,   -- same 0-100 twin as the other views
   avg_delivery_days,
   avg_freight_value,
   first_order_date,

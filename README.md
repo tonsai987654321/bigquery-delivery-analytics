@@ -21,7 +21,7 @@ Olist CSVs  ──01_load.sh──▶  olist_raw  ──02_marts.sql──▶  o
                                                  └─06_bi_views.sql ────────▶ 4 BI views
                                                                                │
                                                      07_bi_checks.sql ◀────────┤
-                                                     11 checks + ASSERT        │
+                                                     12 checks + ASSERT        │
                                                                                ▼
                                                                        Looker Studio
 ```
@@ -127,12 +127,12 @@ The dashboard contains **no calculated fields** — `on_time_pct` is exposed on 
 `%` without scaling and would render a 0-1 rate as "0.93%". Keeping the scaled
 column in the view means every number on screen traces back to this file.
 
-`07_bi_checks.sql` gates that layer with 11 assertions: the `_opt` copy holds the
+`07_bi_checks.sql` gates that layer with 12 assertions: the `_opt` copy holds the
 same rows and the same headline rate as its source, every aggregate view adds
 back up to the fact row count, `month_start` round-trips to `order_month`, the
 region codes are valid ISO 3166-2, no plotted rate escapes 0–1, and the
 leaderboard floor actually holds, and `on_time_pct` stays exactly 100x
-`on_time_rate`. Current state: **11 / 11 PASS**.
+`on_time_rate`, in every view that exposes both. Current state: **12 / 12 PASS**.
 
 ## The dashboard
 
@@ -152,6 +152,14 @@ report:
 | Time series | on-time rate by month | `vw_bi_monthly` |
 | Geo chart | on-time rate by customer state | `vw_bi_orders.customer_region_code` |
 | Table | seller leaderboard, 796 sellers | `vw_bi_seller_leaderboard` |
+
+Laid out on a two-column grid: title, the two scorecards side by side, the trend
+across the full width, then the map and the table sharing the bottom row. The
+trend's y-axis is pinned to 0-100 rather than left on auto, which otherwise
+padded the scale out to -50..150 and squashed the line into the middle third.
+Every percentage on the page reads on the same 0-100 scale, including the
+leaderboard column, because `on_time_pct` is exposed by each view that has a
+rate — not because a number was reformatted in the report.
 
 Two things the dashboard confirms rather than asserts: both scorecards match the
 figures `03_quality_checks.sql` verifies against the warehouse, and the table
@@ -271,7 +279,7 @@ the derived table first to stay re-runnable.
 | `sql/04_partition_cluster.sql` | partitioned + clustered copy of the fact |
 | `05_benchmark.sh` | bytes scanned before/after, dry-run and real |
 | `sql/06_bi_views.sql` | the four views a BI tool reads |
-| `sql/07_bi_checks.sql` | 11 checks + `ASSERT` over the `_opt` copy and the views |
+| `sql/07_bi_checks.sql` | 12 checks + `ASSERT` over the `_opt` copy and the views |
 | `results/benchmark.md` | generated output of the benchmark |
 | `dashboard/screenshots/` | the Looker Studio report, captured |
 | `.github/workflows/ci.yml` | shellcheck + sqlfluff gates, no credentials needed |
