@@ -39,7 +39,12 @@ SELECT
   delivery_days,
   late_days,
   is_late,
-  IF(is_late, 0, 1) AS on_time_flag,   -- AVG(on_time_flag) = on-time rate
+  IF(is_late, 0, 1)   AS on_time_flag,  -- AVG(on_time_flag) = on-time rate, 0-1
+  -- Same fact on a 0-100 scale. Looker Studio's percent format appends '%'
+  -- without scaling, so a 0-1 rate renders as "0.93%". Exposing the scaled
+  -- column here keeps the dashboard free of calculated fields: every number
+  -- on screen is defined in this file.
+  IF(is_late, 0, 100) AS on_time_pct,   -- AVG(on_time_pct) = on-time rate, 0-100
   item_count,
   order_value,
   freight_value
@@ -53,6 +58,7 @@ SELECT
   PARSE_DATE('%Y%m', CAST(order_month AS STRING)) AS month_start,
   COUNT(*)                                 AS orders,
   ROUND(AVG(IF(is_late, 0, 1)), 4)         AS on_time_rate,
+  ROUND(AVG(IF(is_late, 0, 100)), 2)       AS on_time_pct,
   ROUND(AVG(delivery_days), 2)             AS avg_delivery_days,
   ROUND(AVG(freight_value), 2)             AS avg_freight_value,
   ROUND(SUM(order_value), 2)               AS order_value
@@ -66,6 +72,7 @@ SELECT
   CONCAT('BR-', customer_state)            AS customer_region_code,
   COUNT(*)                                 AS orders,
   ROUND(AVG(IF(is_late, 0, 1)), 4)         AS on_time_rate,
+  ROUND(AVG(IF(is_late, 0, 100)), 2)       AS on_time_pct,
   ROUND(AVG(delivery_days), 2)             AS avg_delivery_days,
   ROUND(AVG(freight_value), 2)             AS avg_freight_value
 FROM olist_marts.fct_delivery_performance_opt

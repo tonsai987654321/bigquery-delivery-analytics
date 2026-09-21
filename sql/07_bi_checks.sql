@@ -63,6 +63,20 @@ SELECT 'bi_on_time_rate_out_of_range',
      + (SELECT COUNTIF(on_time_rate < 0 OR on_time_rate > 1) FROM olist_marts.vw_bi_by_state),
        'every rate a chart plots must sit between 0 and 1'
 
+UNION ALL
+SELECT 'on_time_pct_scale_drift',
+       (SELECT COUNTIF(ABS(on_time_pct - on_time_rate * 100) > 0.01)
+        FROM olist_marts.vw_bi_monthly)
+     + (SELECT COUNTIF(ABS(on_time_pct - on_time_rate * 100) > 0.01)
+        FROM olist_marts.vw_bi_by_state),
+       'on_time_pct exists only to be the 0-100 twin of on_time_rate — they must agree'
+
+UNION ALL
+SELECT 'orders_on_time_pct_mismatch',
+       (SELECT COUNTIF(on_time_pct <> on_time_flag * 100)
+        FROM olist_marts.vw_bi_orders),
+       'per order, on_time_pct must be on_time_flag scaled by 100'
+
 -- the leaderboard floor is a stated rule, so enforce it
 UNION ALL
 SELECT 'leaderboard_below_floor',

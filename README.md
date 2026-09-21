@@ -122,11 +122,17 @@ on-time rate a plain `AVG()` in any tool. The 20-order floor on the leaderboard
 is a judgement call — a seller with three orders and a perfect record is noise —
 and it is written down here rather than buried in a dashboard filter.
 
-`07_bi_checks.sql` gates that layer with 9 assertions: the `_opt` copy holds the
+The dashboard contains **no calculated fields** — `on_time_pct` is exposed on a
+0-100 scale straight from SQL, because Looker Studio's percent format appends a
+`%` without scaling and would render a 0-1 rate as "0.93%". Keeping the scaled
+column in the view means every number on screen traces back to this file.
+
+`07_bi_checks.sql` gates that layer with 11 assertions: the `_opt` copy holds the
 same rows and the same headline rate as its source, every aggregate view adds
 back up to the fact row count, `month_start` round-trips to `order_month`, the
 region codes are valid ISO 3166-2, no plotted rate escapes 0–1, and the
-leaderboard floor actually holds. Current state: **9 / 9 PASS**.
+leaderboard floor actually holds, and `on_time_pct` stays exactly 100x
+`on_time_rate`. Current state: **11 / 11 PASS**.
 
 ## Continuous integration
 
@@ -219,7 +225,7 @@ the derived table first to stay re-runnable.
 | `sql/04_partition_cluster.sql` | partitioned + clustered copy of the fact |
 | `05_benchmark.sh` | bytes scanned before/after, dry-run and real |
 | `sql/06_bi_views.sql` | the four views a BI tool reads |
-| `sql/07_bi_checks.sql` | 9 checks + `ASSERT` over the `_opt` copy and the views |
+| `sql/07_bi_checks.sql` | 11 checks + `ASSERT` over the `_opt` copy and the views |
 | `results/benchmark.md` | generated output of the benchmark |
 | `.github/workflows/ci.yml` | shellcheck + sqlfluff gates, no credentials needed |
 | `.sqlfluff` | pins the BigQuery dialect so local and CI runs agree |
