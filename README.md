@@ -9,11 +9,21 @@ estimate.
 
 ```
 Olist CSVs  ──01_load.sh──▶  olist_raw  ──02_marts.sql──▶  olist_marts
-  (Kaggle)     bq load          (4 tables)   staging views      fct + dim
-                                                  │
-                                                  ├─03_quality_checks.sql─▶ 12 checks + ASSERT
-                                                  ├─04_partition_cluster.sql─▶ partitioned copy
-                                                  └─05_benchmark.sh─▶ bytes scanned, before/after
+  (Kaggle)     bq load         (4 tables)   staging views      fct + dim
+                                                 │
+                                                 ├─03_quality_checks.sql──▶ 12 checks + ASSERT
+                                                 │
+                                                 ├─04_partition_cluster.sql─▶ _opt copy
+                                                 │                             │
+                                                 │   05_benchmark.sh ◀─────────┤
+                                                 │   bytes before/after        │
+                                                 │                             ▼
+                                                 └─06_bi_views.sql ────────▶ 4 BI views
+                                                                               │
+                                                     07_bi_checks.sql ◀────────┤
+                                                     9 checks + ASSERT         │
+                                                                               ▼
+                                                                       Looker Studio
 ```
 
 ## Run it
@@ -29,6 +39,9 @@ bq --location=US query --use_legacy_sql=false < sql/02_marts.sql
 bq --location=US query --use_legacy_sql=false < sql/03_quality_checks.sql
 bq --location=US query --use_legacy_sql=false < sql/04_partition_cluster.sql
 ./05_benchmark.sh
+
+bq --location=US query --use_legacy_sql=false < sql/06_bi_views.sql
+bq --location=US query --use_legacy_sql=false < sql/07_bi_checks.sql
 ```
 
 `env.sh` holds the project, location and dataset names in one place, so a stray
@@ -90,6 +103,30 @@ ASSERT (SELECT COALESCE(SUM(bad_rows), 0) FROM checks) = 0
 
 `ASSERT` makes the job exit non-zero, so this is a gate a CI run can hang off,
 not a table someone has to remember to read. Current state: **12 / 12 PASS**.
+
+## The BI layer
+
+`06_bi_views.sql` builds four views, one per thing the dashboard shows:
+
+| View | Grain | Feeds |
+|---|---|---|
+| `vw_bi_orders` | one delivered order | drill-down detail, date and state filters |
+| `vw_bi_monthly` | one month | the on-time trend line |
+| `vw_bi_by_state` | one customer state | the freight and delay map |
+| `vw_bi_seller_leaderboard` | one seller, 20+ orders | the seller table |
+
+The dashboard points at these rather than at the fact table, so that metric
+definitions live in SQL under review instead of inside a calculated field in one
+person's report. Booleans are exposed as `on_time_flag` (0/1), which makes
+on-time rate a plain `AVG()` in any tool. The 20-order floor on the leaderboard
+is a judgement call — a seller with three orders and a perfect record is noise —
+and it is written down here rather than buried in a dashboard filter.
+
+`07_bi_checks.sql` gates that layer with 9 assertions: the `_opt` copy holds the
+same rows and the same headline rate as its source, every aggregate view adds
+back up to the fact row count, `month_start` round-trips to `order_month`, the
+region codes are valid ISO 3166-2, no plotted rate escapes 0–1, and the
+leaderboard floor actually holds. Current state: **9 / 9 PASS**.
 
 ## Continuous integration
 
@@ -181,6 +218,8 @@ the derived table first to stay re-runnable.
 | `sql/03_quality_checks.sql` | 12 checks + `ASSERT` gate |
 | `sql/04_partition_cluster.sql` | partitioned + clustered copy of the fact |
 | `05_benchmark.sh` | bytes scanned before/after, dry-run and real |
+| `sql/06_bi_views.sql` | the four views a BI tool reads |
+| `sql/07_bi_checks.sql` | 9 checks + `ASSERT` over the `_opt` copy and the views |
 | `results/benchmark.md` | generated output of the benchmark |
 | `.github/workflows/ci.yml` | shellcheck + sqlfluff gates, no credentials needed |
 | `.sqlfluff` | pins the BigQuery dialect so local and CI runs agree |
