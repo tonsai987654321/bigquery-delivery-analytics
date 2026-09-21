@@ -21,7 +21,7 @@ Olist CSVs  ──01_load.sh──▶  olist_raw  ──02_marts.sql──▶  o
                                                  └─06_bi_views.sql ────────▶ 4 BI views
                                                                                │
                                                      07_bi_checks.sql ◀────────┤
-                                                     9 checks + ASSERT         │
+                                                     11 checks + ASSERT        │
                                                                                ▼
                                                                        Looker Studio
 ```
@@ -134,6 +134,48 @@ region codes are valid ISO 3166-2, no plotted rate escapes 0–1, and the
 leaderboard floor actually holds, and `on_time_pct` stays exactly 100x
 `on_time_rate`. Current state: **11 / 11 PASS**.
 
+## The dashboard
+
+Built in Looker Studio (which Google now presents as **Data Studio**) on the
+BigQuery connector, reading the views above.
+
+![KPIs and the monthly on-time trend](dashboard/screenshots/01_kpi_and_monthly_trend.jpg)
+![On-time rate by customer state, and the seller leaderboard](dashboard/screenshots/02_state_map_and_seller_table.jpg)
+
+Five components, each bound to a view rather than to a query typed into the
+report:
+
+| Component | Shows | Source |
+|---|---|---|
+| Scorecard | on-time rate, **93.23 %** | `vw_bi_orders.on_time_pct`, averaged |
+| Scorecard | delivered orders, **96,470** | `vw_bi_monthly.orders`, summed |
+| Time series | on-time rate by month | `vw_bi_monthly` |
+| Geo chart | on-time rate by customer state | `vw_bi_orders.customer_region_code` |
+| Table | seller leaderboard, 796 sellers | `vw_bi_seller_leaderboard` |
+
+Two things the dashboard confirms rather than asserts: both scorecards match the
+figures `03_quality_checks.sql` verifies against the warehouse, and the table
+footer reads `1 - 100 / 796`, which is exactly the number of sellers clearing the
+20-order floor written into the view.
+
+Two readings worth having, both checked against the warehouse rather than eyeballed
+off the chart:
+
+The violent swing at the left of the trend line is **not** a delivery collapse.
+`vw_bi_monthly` shows 2016-09 holding a single order that happened to be late
+(0 %), 2016-10 holding 265 orders at 99.25 %, and **2016-11 missing from the data
+entirely** — the chart draws that absent month as zero. 2016-12 is another single
+order. The first month with enough volume to mean anything is 2017-01, at 750
+orders and 97.07 %. A reader who trusts the left edge of this chart is reading
+sampling noise and a gap in the source data as a trend.
+
+The geography is real, though. On-time rate by customer state runs from **78.59 %
+in Alagoas (397 orders) to 97.24 % in Amazonas (145 orders)**, so the national
+93.23 % averages over an 18-point spread.
+
+The report is private. Opening it to the public is a sharing change, not a code
+change, and the screenshots above are what the repo carries.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs two gates on every push and pull request:
@@ -207,6 +249,10 @@ the derived table first to stay re-runnable.
   numbers do not.
 - Sandbox tables expire after 60 days. Re-running the chain rebuilds everything
   from the CSVs, which is why the load step is scripted rather than manual.
+- The trend chart plots a missing month (2016-11) as zero and gives single-order
+  months the same visual weight as months with thousands. A production version
+  would suppress months below a volume floor, the way the seller leaderboard
+  already does.
 - No orchestrator yet — the steps are run in order by hand. Airflow is the next
   piece.
 - The `_opt` table is a full copy of the fact table, which doubles storage. At
@@ -227,6 +273,7 @@ the derived table first to stay re-runnable.
 | `sql/06_bi_views.sql` | the four views a BI tool reads |
 | `sql/07_bi_checks.sql` | 11 checks + `ASSERT` over the `_opt` copy and the views |
 | `results/benchmark.md` | generated output of the benchmark |
+| `dashboard/screenshots/` | the Looker Studio report, captured |
 | `.github/workflows/ci.yml` | shellcheck + sqlfluff gates, no credentials needed |
 | `.sqlfluff` | pins the BigQuery dialect so local and CI runs agree |
 
