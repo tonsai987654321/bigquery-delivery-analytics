@@ -1,0 +1,30 @@
+// measures.dax — paste each one into Power BI Desktop: Modeling → New measure.
+//
+// These measures only aggregate columns defined in sql/06_bi_views.sql. What a
+// late order is, what counts as delivered, which sellers make the leaderboard —
+// all of that stays in SQL. DAX here sums, counts and averages; it does not
+// redefine a metric.
+
+Delivered Orders =
+COUNTROWS ( vw_bi_orders )
+
+// Format: Percentage, 2 decimal places.
+// Uses on_time_flag (0/1), not on_time_pct: Power BI's Percentage format
+// multiplies by 100 itself. on_time_pct exists only for Looker Studio, whose
+// percent format does not.
+On-time Rate =
+AVERAGE ( vw_bi_orders[on_time_flag] )
+
+Late Orders =
+CALCULATE ( [Delivered Orders], vw_bi_orders[is_late] = TRUE () )
+
+// Format: Decimal number, 1 decimal place.
+Avg Delivery Days =
+AVERAGE ( vw_bi_orders[delivery_days] )
+
+// Format: Decimal number, 2 decimal places. Olist amounts are in BRL.
+Avg Freight (BRL) =
+AVERAGE ( vw_bi_orders[freight_value] )
+
+Order Value (BRL) =
+SUM ( vw_bi_orders[order_value] )

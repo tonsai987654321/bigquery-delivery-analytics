@@ -1,0 +1,19 @@
+{
+  "name": "Olist Navy",
+  "dataColors": ["#1E3A5F", "#3A6EA8", "#7FA7D9", "#B0C4DE", "#E07A3F", "#6B7D92", "#2E7D5B", "#C0504D"],
+  "background": "#FFFFFF",
+  "foreground": "#1A1A1A",
+  "tableAccent": "#1E3A5F",
+  "good": "#2E7D5B",
+  "neutral": "#B0C4DE",
+  "bad": "#C0504D",
+  "maximum": "#1E3A5F",
+  "center": "#7FA7D9",
+  "minimum": "#E8F0FB",
+  "textClasses": {
+    "callout": { "fontFace": "Segoe UI Semibold", "fontSize": 28, "color": "#1E3A5F" },
+    "title":   { "fontFace": "Segoe UI Semibold", "fontSize": 12, "color": "#1E3A5F" },
+    "header":  { "fontFace": "Segoe UI Semibold", "fontSize": 12, "color": "#1E3A5F" },
+    "label":   { "fontFace": "Segoe UI", "fontSize": 10, "color": "#2C2C2C" }
+  }
+}

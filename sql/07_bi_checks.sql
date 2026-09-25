@@ -83,6 +83,32 @@ SELECT 'orders_on_time_pct_mismatch',
         FROM olist_marts.vw_bi_orders),
        'per order, on_time_pct must be on_time_flag scaled by 100'
 
+-- reference and calendar dimensions the Power BI model joins on
+UNION ALL
+SELECT 'state_name_missing',
+       (SELECT COUNTIF(customer_state_name IS NULL OR customer_region IS NULL)
+        FROM olist_marts.vw_bi_orders),
+       'every order must map to a full state name and region, or the map drops it'
+
+UNION ALL
+SELECT 'ref_state_count',
+       IF((SELECT COUNT(DISTINCT code) FROM olist_marts.ref_br_state) = 27, 0, 1),
+       'Brazil has 26 states plus the Federal District — 27 codes, each once'
+
+UNION ALL
+SELECT 'calendar_misses_order_dates',
+       (SELECT COUNT(*) FROM olist_marts.vw_bi_orders o
+        LEFT JOIN olist_marts.vw_bi_calendar c ON c.date = o.order_date
+        WHERE c.date IS NULL),
+       'every order_date must exist in the calendar, or the relationship drops rows'
+
+UNION ALL
+SELECT 'calendar_has_gaps',
+       (SELECT IF(COUNT(*) = COUNT(DISTINCT date)
+                  AND DATE_DIFF(MAX(date), MIN(date), DAY) + 1 = COUNT(*), 0, 1)
+        FROM olist_marts.vw_bi_calendar),
+       'the calendar must be one row per day with no gaps and no duplicates'
+
 -- the leaderboard floor is a stated rule, so enforce it
 UNION ALL
 SELECT 'leaderboard_below_floor',

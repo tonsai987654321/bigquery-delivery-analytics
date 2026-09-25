@@ -23,32 +23,59 @@
 -- which is the same ratio 05_benchmark.sh reports querying the tables directly.
 -- A view does not flatten the physical layout underneath it.
 
+-- ── reference: Brazilian states ─────────────────────────────────────────────
+-- Olist stores states as two-letter UF codes. A code like "SP" or "PA" is
+-- ambiguous to a map service (PA is also Panama and Pennsylvania), so the BI
+-- layer carries the full state name and a "<name>, Brazil" string a geocoder
+-- resolves without guessing, plus the IBGE macro-region for regional roll-ups.
+CREATE OR REPLACE VIEW olist_marts.ref_br_state AS
+SELECT code, name, region
+FROM UNNEST([
+  STRUCT('AC' AS code, 'Acre' AS name, 'Norte' AS region),
+  ('AP', 'Amapá', 'Norte'), ('AM', 'Amazonas', 'Norte'), ('PA', 'Pará', 'Norte'),
+  ('RO', 'Rondônia', 'Norte'), ('RR', 'Roraima', 'Norte'), ('TO', 'Tocantins', 'Norte'),
+  ('AL', 'Alagoas', 'Nordeste'), ('BA', 'Bahia', 'Nordeste'), ('CE', 'Ceará', 'Nordeste'),
+  ('MA', 'Maranhão', 'Nordeste'), ('PB', 'Paraíba', 'Nordeste'), ('PE', 'Pernambuco', 'Nordeste'),
+  ('PI', 'Piauí', 'Nordeste'), ('RN', 'Rio Grande do Norte', 'Nordeste'), ('SE', 'Sergipe', 'Nordeste'),
+  ('DF', 'Distrito Federal', 'Centro-Oeste'), ('GO', 'Goiás', 'Centro-Oeste'),
+  ('MT', 'Mato Grosso', 'Centro-Oeste'), ('MS', 'Mato Grosso do Sul', 'Centro-Oeste'),
+  ('ES', 'Espírito Santo', 'Sudeste'), ('MG', 'Minas Gerais', 'Sudeste'),
+  ('RJ', 'Rio de Janeiro', 'Sudeste'), ('SP', 'São Paulo', 'Sudeste'),
+  ('PR', 'Paraná', 'Sul'), ('RS', 'Rio Grande do Sul', 'Sul'), ('SC', 'Santa Catarina', 'Sul')
+]);
+
 -- ── per-order grain: the detail table behind every drill-down ────────────────
 CREATE OR REPLACE VIEW olist_marts.vw_bi_orders AS
 SELECT
-  order_id,
-  order_date,
-  order_month,
-  seller_id,
-  seller_state,
-  customer_state,
-  -- ISO 3166-2 subdivision code, which is what a mapping tool can resolve
-  CONCAT('BR-', customer_state) AS customer_region_code,
-  delivered_date,
-  estimated_date,
-  delivery_days,
-  late_days,
-  is_late,
-  IF(is_late, 0, 1)   AS on_time_flag,  -- AVG(on_time_flag) = on-time rate, 0-1
+  f.order_id,
+  f.order_date,
+  f.order_month,
+  f.seller_id,
+  f.seller_state,
+  f.customer_state,
+  -- ISO 3166-2 subdivision code, which Looker Studio's geo chart resolves
+  CONCAT('BR-', f.customer_state) AS customer_region_code,
+  st.name   AS customer_state_name,
+  st.region AS customer_region,
+  -- unambiguous string for Power BI's map geocoding
+  CONCAT(st.name, ', Brazil') AS customer_state_geo,
+  f.delivered_date,
+  f.estimated_date,
+  f.delivery_days,
+  f.late_days,
+  f.is_late,
+  IF(f.is_late, 0, 1)   AS on_time_flag,  -- AVG(on_time_flag) = on-time rate, 0-1
   -- Same fact on a 0-100 scale. Looker Studio's percent format appends '%'
   -- without scaling, so a 0-1 rate renders as "0.93%". Exposing the scaled
   -- column here keeps the dashboard free of calculated fields: every number
-  -- on screen is defined in this file.
-  IF(is_late, 0, 100) AS on_time_pct,   -- AVG(on_time_pct) = on-time rate, 0-100
-  item_count,
-  order_value,
-  freight_value
-FROM olist_marts.fct_delivery_performance_opt;
+  -- on screen is defined in this file. Power BI's Percentage format does
+  -- scale, so a Power BI report should average on_time_flag instead.
+  IF(f.is_late, 0, 100) AS on_time_pct,   -- AVG(on_time_pct) = on-time rate, 0-100
+  f.item_count,
+  f.order_value,
+  f.freight_value
+FROM olist_marts.fct_delivery_performance_opt AS f
+LEFT JOIN olist_marts.ref_br_state AS st ON st.code = f.customer_state;
 
 -- ── monthly trend ───────────────────────────────────────────────────────────
 CREATE OR REPLACE VIEW olist_marts.vw_bi_monthly AS
@@ -95,3 +122,21 @@ SELECT
   last_order_date
 FROM olist_marts.dim_seller
 WHERE delivered_orders >= 20;
+
+-- ── calendar: one row per day across the order history ──────────────────────
+-- A BI tool needs a continuous date dimension to slice by month and year and
+-- to show a month with no orders as a gap rather than silently skipping it.
+-- Built here instead of in DAX so the date logic is reviewed with the rest of
+-- the SQL. The range derives from the data, so it follows a reload.
+CREATE OR REPLACE VIEW olist_marts.vw_bi_calendar AS
+SELECT
+  d                                   AS date,
+  DATE_TRUNC(d, MONTH)                AS month_start,
+  EXTRACT(YEAR FROM d)                AS year,
+  EXTRACT(MONTH FROM d)               AS month_number,
+  FORMAT_DATE('%b %Y', d)             AS month_label,
+  CAST(FORMAT_DATE('%Y%m', d) AS INT64) AS order_month
+FROM UNNEST(GENERATE_DATE_ARRAY(
+  (SELECT DATE_TRUNC(MIN(order_date), MONTH) FROM olist_marts.fct_delivery_performance_opt),
+  (SELECT LAST_DAY(MAX(order_date), MONTH) FROM olist_marts.fct_delivery_performance_opt)
+)) AS d;

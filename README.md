@@ -21,7 +21,7 @@ Olist CSVs  ──01_load.sh──▶  olist_raw  ──02_marts.sql──▶  o
                                                  └─06_bi_views.sql ────────▶ 4 BI views
                                                                                │
                                                      07_bi_checks.sql ◀────────┤
-                                                     12 checks + ASSERT        │
+                                                     16 checks + ASSERT        │
                                                                                ▼
                                                                        Looker Studio
 ```
@@ -114,6 +114,8 @@ not a table someone has to remember to read. Current state: **12 / 12 PASS**.
 | `vw_bi_monthly` | one month | the on-time trend line |
 | `vw_bi_by_state` | one customer state | the freight and delay map |
 | `vw_bi_seller_leaderboard` | one seller, 20+ orders | the seller table |
+| `vw_bi_calendar` | one day | date dimension for Power BI |
+| `ref_br_state` | one state | full names and regions, so a map geocodes without guessing |
 
 The dashboard points at these rather than at the fact table, so that metric
 definitions live in SQL under review instead of inside a calculated field in one
@@ -127,12 +129,12 @@ The dashboard contains **no calculated fields** — `on_time_pct` is exposed on 
 `%` without scaling and would render a 0-1 rate as "0.93%". Keeping the scaled
 column in the view means every number on screen traces back to this file.
 
-`07_bi_checks.sql` gates that layer with 12 assertions: the `_opt` copy holds the
+`07_bi_checks.sql` gates that layer with 16 assertions: the `_opt` copy holds the
 same rows and the same headline rate as its source, every aggregate view adds
 back up to the fact row count, `month_start` round-trips to `order_month`, the
 region codes are valid ISO 3166-2, no plotted rate escapes 0–1, and the
 leaderboard floor actually holds, and `on_time_pct` stays exactly 100x
-`on_time_rate`, in every view that exposes both. Current state: **12 / 12 PASS**.
+`on_time_rate`, in every view that exposes both. The model's joins are checked too: every order maps to a state name and region, the reference holds all 27 states, and the calendar covers every order date with no gaps. Current state: **16 / 16 PASS**.
 
 ## The dashboard
 
@@ -279,9 +281,10 @@ the derived table first to stay re-runnable.
 | `sql/04_partition_cluster.sql` | partitioned + clustered copy of the fact |
 | `05_benchmark.sh` | bytes scanned before/after, dry-run and real |
 | `sql/06_bi_views.sql` | the four views a BI tool reads |
-| `sql/07_bi_checks.sql` | 12 checks + `ASSERT` over the `_opt` copy and the views |
+| `sql/07_bi_checks.sql` | 16 checks + `ASSERT` over the `_opt` copy and the views |
 | `results/benchmark.md` | generated output of the benchmark |
 | `dashboard/screenshots/` | the Looker Studio report, captured |
+| `powerbi/` | Power BI build guide, DAX measures, theme |
 | `.github/workflows/ci.yml` | shellcheck + sqlfluff gates, no credentials needed |
 | `.sqlfluff` | pins the BigQuery dialect so local and CI runs agree |
 
