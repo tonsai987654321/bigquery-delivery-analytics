@@ -318,5 +318,9 @@ the derived table first to stay re-runnable.
 ## Data
 
 [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce),
-published on Kaggle under CC BY-NC-SA 4.0. The CSVs are not redistributed here —
-`data/download.sh` fetches them, and `.gitignore` keeps them out of the repo.
+published on Kaggle under CC BY-NC-SA 4.0. The raw CSVs are not redistributed
+here — `data/download.sh` fetches them, and `.gitignore` keeps them out of the
+repo. The Power BI file does embed data: Import mode stores the three BI views
+(96,470 delivered orders, already anonymised by Olist) inside the `.pbix`. That
+copy is shared under the same licence — attribution to Olist, non-commercial use,
+share-alike.
