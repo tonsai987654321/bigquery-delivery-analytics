@@ -10,8 +10,6 @@ Time: about 2–3 hours the first time.
 
 - **Power BI Desktop** — free from the Microsoft Store. Skip the sign-in prompt; a
   report builds and saves without an account.
-- **Enable map visuals** — File → Options and settings → Options → Security →
-  tick *Use Map and Filled Map visuals*. They are off by default.
 - **Google account** — sign in to BigQuery as the account that owns
   `bq-scg-portfolio`. If the browser holds several Google accounts, pick that one.
 - **Deadline** — the sandbox expires the tables on **2026-10-30**. Build in
@@ -79,8 +77,8 @@ Segoe UI, matching the rest of the portfolio.
 ├───────────────┴───────────────┴───────────────┴───────────────┤
 │  Orders (columns) and on-time rate (line) by month            │
 ├───────────────────────────────┬───────────────────────────────┤
-│  On-time rate by state (map)  │  Top 10 sellers (table)       │
-│  or by region (bar)           │                               │
+│  On-time rate by state (bar,  │  Top 10 sellers (table)       │
+│  worst first)                 │                               │
 └───────────────────────────────┴───────────────────────────────┘
 ```
 
@@ -90,14 +88,27 @@ Segoe UI, matching the rest of the portfolio.
 | Slicer | `vw_bi_orders[customer_region]`, style *Dropdown* |
 | 4 × Card | Delivered Orders · On-time Rate · Avg Delivery Days · Avg Freight (BRL) |
 | **Line and clustered column chart** | X: `vw_bi_calendar[month_start]` (hierarchy off) · Columns: Delivered Orders · Line: On-time Rate |
-| Filled map | Location: `customer_state_geo` · Colour saturation: On-time Rate |
-| Table | `seller_id`, `seller_state` from the leaderboard · Delivered Orders · On-time Rate · Avg Delivery Days · Filter: *Top N 10 by Delivered Orders* |
+| Clustered bar chart | Y: `customer_state_name` · X: On-time Rate · sort ascending, so the worst state is on top |
+| Table | `seller_id`, `seller_state` from the leaderboard · Delivered Orders · On-time Rate · Avg Delivery Days · Filters on this visual: *Top N 10 by Delivered Orders*, and leaderboard `seller_id` with *(Blank)* unticked |
 
 Why a column-plus-line chart rather than the plain line in the Looker report:
 plotting volume next to the rate shows at a glance that 2016-09 and 2016-12 hold
 a single order each and 2016-11 has none, so nobody reads the swing at the left
 edge as a real collapse. The months with no orders show as a gap here, not as a
 zero, because the calendar supplies the empty month.
+
+The filled map was the first choice and was dropped: Power BI's Bing geocoder
+placed some states outside Brazil, and Microsoft is retiring the map visuals. A
+bar chart sorted worst first answers the same question with nothing to geocode.
+
+The table needs the *(Blank)* filter because 11,853 orders come from sellers
+under the 20-order floor. They have no leaderboard row, so Power BI groups them
+under a blank seller, which Top N then ranks first. Two traps:
+
+- Filter the **leaderboard's** `seller_id`. The fact table's `seller_id` and
+  `seller_state` are never blank, so a filter on them removes nothing.
+- Put the filter under **Filters on this visual**. On the page it cuts every card
+  to leaderboard sellers only (84,617 orders, 93.24 %).
 
 Use View → **Gridlines** and **Snap to grid**, and Format → **Align** /
 **Distribute** with several visuals selected. Give every visual a plain-English
@@ -136,7 +147,9 @@ pointing the wrong way, or On-time Rate built on `on_time_pct` instead of
 ## 7. Save into the repo
 
 - Save as `powerbi/olist_delivery_performance.pbix`.
-- Export page images: File → Export → Export to PDF, plus a PNG screenshot of the
-  page into `powerbi/screenshots/`.
+- Export the page: File → Export → Export to PDF, as
+  `powerbi/olist_delivery_performance.pdf`.
+- The screenshot `powerbi/screenshots/dashboard.png` is rendered from that PDF
+  (`sips -s format png --resampleWidth 2400 … --out …` on macOS).
 - Upload both through GitHub (Add file → Upload files, into `powerbi/`), or copy
   them across and commit.

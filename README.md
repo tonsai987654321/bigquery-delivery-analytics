@@ -23,7 +23,7 @@ Olist CSVs  ──01_load.sh──▶  olist_raw  ──02_marts.sql──▶  o
                                                      07_bi_checks.sql ◀────────┤
                                                      16 checks + ASSERT        │
                                                                                ▼
-                                                                       Looker Studio
+                                                              Looker Studio · Power BI
 ```
 
 ## Run it
@@ -186,6 +186,33 @@ in Alagoas (397 orders) to 97.24 % in Amazonas (145 orders)**, so the national
 The report is private. Opening it to the public is a sharing change, not a code
 change, and the screenshots above are what the repo carries.
 
+## The Power BI report
+
+The same views, modelled as a star schema in Power BI Desktop and imported into
+the `.pbix`, so the report keeps working after the sandbox expires the tables.
+
+![Power BI report: KPIs, monthly trend, state ranking, top sellers](powerbi/screenshots/dashboard.png)
+
+- **Model** — `vw_bi_orders` as the fact, `vw_bi_calendar` (marked as the date
+  table) and `vw_bi_seller_leaderboard` as dimensions, both one-to-many, single
+  direction. Six DAX measures live in [`powerbi/measures.dax`](powerbi/measures.dax).
+- **On-time rate** is `AVERAGE(on_time_flag)` with Power BI's percentage format,
+  which scales 0–1 — the opposite of Looker Studio, which is why the Looker
+  report reads `on_time_pct` instead.
+- **Columns plus line** for the monthly chart, so the volume bars show that the
+  2016 swing sits on one or two orders.
+- **A ranked bar chart instead of a filled map** for states: worst first, so
+  Alagoas (78.59 %) leads, and no geocoding to go wrong.
+- **Top 10 sellers** filtered on the leaderboard's `seller_id`, excluding blank.
+  The 11,853 orders from sellers under the 20-order floor have no leaderboard row,
+  so Power BI groups them under a blank seller. That filter belongs on the table
+  visual only — on the page it silently drops the headline to 84,617 orders.
+
+Every figure on the page matches the validation table in
+[`powerbi/README.md`](powerbi/README.md#6-check-the-numbers-before-trusting-the-report).
+Files: [`olist_delivery_performance.pbix`](powerbi/olist_delivery_performance.pbix)
+and a [PDF export](powerbi/olist_delivery_performance.pdf).
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs two gates on every push and pull request:
@@ -284,7 +311,7 @@ the derived table first to stay re-runnable.
 | `sql/07_bi_checks.sql` | 16 checks + `ASSERT` over the `_opt` copy and the views |
 | `results/benchmark.md` | generated output of the benchmark |
 | `dashboard/screenshots/` | the Looker Studio report, captured |
-| `powerbi/` | Power BI build guide, DAX measures, theme |
+| `powerbi/` | Power BI report (`.pbix`, PDF, screenshot), build guide, DAX measures, theme |
 | `.github/workflows/ci.yml` | shellcheck + sqlfluff gates, no credentials needed |
 | `.sqlfluff` | pins the BigQuery dialect so local and CI runs agree |
 
