@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Lint shell scripts
-        run: shellcheck 01_load.sh 05_benchmark.sh data/download.sh
+        run: shellcheck -x 01_load.sh 05_benchmark.sh refresh.sh data/download.sh
 
   sql:
     name: sqlfluff parse

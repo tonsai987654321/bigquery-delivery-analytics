@@ -12,7 +12,8 @@ Time: about 2–3 hours the first time.
   report builds and saves without an account.
 - **Google account** — sign in to BigQuery as the account that owns
   `bq-scg-portfolio`. If the browser holds several Google accounts, pick that one.
-- **Deadline** — the sandbox expires the tables on **2026-10-30**. Build in
+- **Deadline** — the sandbox expires the tables 60 days after they are built
+  (`./refresh.sh` prints the current date and pushes it back). Build in
   **Import** mode: the data is copied into the `.pbix`, so the report keeps
   working after the tables are gone. Re-running the SQL chain restores them.
 

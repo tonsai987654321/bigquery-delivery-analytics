@@ -44,6 +44,9 @@ bq --location=US query --use_legacy_sql=false < sql/06_bi_views.sql
 bq --location=US query --use_legacy_sql=false < sql/07_bi_checks.sql
 ```
 
+To keep a sandbox warehouse alive past its 60-day expiry, run `./refresh.sh`
+instead — see *Known limits*.
+
 `env.sh` holds the project, location and dataset names in one place, so a stray
 `--location` can never send a job to the wrong region.
 
@@ -284,8 +287,11 @@ the derived table first to stay re-runnable.
 
 - The data covers 2016–2018 and is Brazilian; the pipeline shape transfers, the
   numbers do not.
-- Sandbox tables expire after 60 days. Re-running the chain rebuilds everything
-  from the CSVs, which is why the load step is scripted rather than manual.
+- Sandbox tables expire 60 days after they are created, and the sandbox refuses
+  to move that date (`bq update --expiration` fails). `./refresh.sh` removes the
+  raw tables, reloads them from the CSVs, rebuilds every mart and view, runs both
+  quality gates, and prints the new expiry dates. Run it a few days before the
+  date the last run printed.
 - The trend chart plots a missing month (2016-11) as zero and gives single-order
   months the same visual weight as months with thousands. A production version
   would suppress months below a volume floor, the way the seller leaderboard
@@ -307,6 +313,7 @@ the derived table first to stay re-runnable.
 | `sql/03_quality_checks.sql` | 12 checks + `ASSERT` gate |
 | `sql/04_partition_cluster.sql` | partitioned + clustered copy of the fact |
 | `05_benchmark.sh` | bytes scanned before/after, dry-run and real |
+| `refresh.sh` | rebuild everything and rerun both gates, resetting the sandbox expiry |
 | `sql/06_bi_views.sql` | the four views a BI tool reads |
 | `sql/07_bi_checks.sql` | 16 checks + `ASSERT` over the `_opt` copy and the views |
 | `results/benchmark.md` | generated output of the benchmark |
